@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Neon Dash - Endless Jumper</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome untuk Icon -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&display=swap');
+        
+        * {
+            font-family: 'Fredoka', sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+
+        body {
+            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+            overflow: hidden;
+        }
+
+        /* Glassmorphism card effect */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+        }
+
+        .neon-btn {
+            background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+            box-shadow: 0 4px 20px rgba(168, 85, 247, 0.4);
+            transition: all 0.2s ease;
+        }
+
+        .neon-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 25px rgba(168, 85, 247, 0.6);
+        }
+
+        .neon-btn:active {
+            transform: translateY(1px);
+        }
+
+        canvas {
+            border-radius: 1rem;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col items-center justify-center p-2 sm:p-4 text-white">
+
+    <!-- Container Utama Game -->
+    <div class="relative w-full max-w-4xl flex flex-col items-center">
+        
+        <!-- Header Info Skor -->
+        <div class="w-full flex justify-between items-center mb-3 px-4 py-2 glass-panel rounded-2xl">
+            <div class="flex items-center gap-2">
+                <i class="fa-solid fa-trophy text-yellow-400 text-lg sm:text-2xl"></i>
+                <div>
+                    <p class="text-xs text-gray-300 uppercase font-semibold tracking-wider">Tertinggi</p>
+                    <p id="highScoreText" class="text-lg sm:text-2xl font-bold text-yellow-400">0</p>
+                </div>
+            </div>
+
+            <div class="text-center">
+                <h1 class="text-lg sm:text-2xl font-black bg-gradient-to-r from-cyan-400 to-fuchsia-400 bg-clip-text text-transparent">
+                    NEON DASH
+                </h1>
+            </div>
+
+            <div class="flex items-center gap-2 text-right">
+                <div>
+                    <p class="text-xs text-gray-300 uppercase font-semibold tracking-wider">Skor</p>
+                    <p id="scoreText" class="text-lg sm:text-2xl font-bold text-cyan-400">0</p>
+                </div>
+                <i class="fa-solid fa-star text-cyan-400 text-lg sm:text-2xl"></i>
+            </div>
+        </div>
+
+        <!-- Kanvas Game dan Overlay UI -->
+        <div class="relative w-full aspect-[16/9] max-h-[70vh] flex items-center justify-center">
+            <canvas id="gameCanvas" class="w-full h-full bg-slate-900 border border-slate-700/50"></canvas>
+
+            <!-- Overlay Layar Mulai / Game Over -->
+            <div id="gameOverlay" class="absolute inset-0 flex flex-col items-center justify-center glass-panel rounded-2xl p-6 text-center transition-all duration-300">
+                <div id="overlayContent" class="flex flex-col items-center">
+                    <div class="w-16 h-16 sm:w-20 sm:h-20 bg-indigo-500/20 rounded-full flex items-center justify-center mb-4 border border-indigo-400/30">
+                        <i id="overlayIcon" class="fa-solid fa-gamepad text-3xl sm:text-4xl text-indigo-400"></i>
+                    </div>
+                    
+                    <h2 id="overlayTitle" class="text-2xl sm:text-4xl font-extrabold mb-2 text-white">
+                        Siap Melompat?
+                    </h2>
+                    
+                    <p id="overlaySubtitle" class="text-sm sm:text-base text-gray-300 mb-6 max-w-xs sm:max-w-md">
+                        Hindari rintangan neon yang mendekat! Tekan <span class="bg-indigo-600/50 px-2 py-0.5 rounded text-white font-mono">SPASI</span> atau <span class="bg-indigo-600/50 px-2 py-0.5 rounded text-white font-mono">TAP</span> untuk melompat.
+                    </p>
+
+                    <button id="startBtn" class="neon-btn px-8 py-3 rounded-full text-lg font-bold flex items-center gap-3">
+                        <i class="fa-solid fa-play"></i> Main Sekarang
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Instruksi / Petunjuk Kontrol Mobile & Desktop -->
+        <div class="w-full mt-3 flex justify-between items-center text-xs sm:text-sm text-gray-400 px-2">
+            <span class="flex items-center gap-1.5"><i class="fa-solid fa-keyboard"></i> Spasi / Panah Atas untuk Lompat</span>
+            <span class="flex items-center gap-1.5"><i class="fa-solid fa-hand-pointer"></i> Sentuh Layar (Mobile)</span>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * System Efek Suara Sederhana Menggunakan Web Audio API (No External Files)
+         */
+        class SoundFX {
+            constructor() {
+                this.ctx = null;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+            }
+
+            playJump() {
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(150, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(400, this.ctx.currentTime + 0.15);
+                
+                gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.15);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.15);
+            }
+
+            playScore() {
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(523.25, this.ctx.currentTime); // C5
+                osc.frequency.setValueAtTime(659.25, this.ctx.currentTime + 0.08); // E5
+
+                gain.gain.setValueAtTime(0.15, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.2);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.2);
+            }
+
+            playGameOver() {
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(300, this.ctx.currentTime);
+                osc.frequency.linearRampToValueAtTime(80, this.ctx.currentTime + 0.4);
+
+                gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.4);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.4);
+            }
+        }
+
+        // Inisialisasi Kanvas & Audio
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const sfx = new SoundFX();
+
+        // Elemen UI
+        const scoreText = document.getElementById('scoreText');
+        const highScoreText = document.getElementById('highScoreText');
+        const gameOverlay = document.getElementById('gameOverlay');
+        const overlayTitle = document.getElementById('overlayTitle');
+        const overlaySubtitle = document.getElementById('overlaySubtitle');
+        const overlayIcon = document.getElementById('overlayIcon');
+        const startBtn = document.getElementById('startBtn');
+
+        // State Game
+        let isPlaying = false;
+        let score = 0;
+        let highScore = localStorage.getItem('neon_dash_high_score') || 0;
+        highScoreText.textContent = Math.floor(highScore);
+        
+        let gameSpeed = 5;
+        let gravity = 0.6;
+        let frameCount = 0;
+        let particles = [];
+        let obstacles = [];
+
+        // Penyesuaian Ukuran Kanvas secara Dinamis
+        function resizeCanvas() {
+            const rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // Objek Pemain (Karakter Loncat)
+        const player = {
+            x: 80,
+            y: 0,
+            width: 36,
+            height: 36,
+            velocityY: 0,
+            jumpForce: -12,
+            grounded: false,
+            rotation: 0,
+            color: '#38bdf8',
+
+            reset() {
+                this.y = canvas.height - this.height - 40;
+                this.velocityY = 0;
+                this.rotation = 0;
+                this.grounded = true;
+            },
+
+            jump() {
+                if (this.grounded) {
+                    this.velocityY = this.jumpForce;
+                    this.grounded = false;
+                    sfx.playJump();
+                    createParticles(this.x + this.width / 2, this.y + this.height, '#38bdf8', 8);
+                }
+            },
+
+            update() {
+                // Terapkan Gravitasi
+                this.velocityY += gravity;
+                this.y += this.velocityY;
+
+                // Deteksi Garis Tanah (Ground)
+                const groundLevel = canvas.height - 40 - this.height;
+                if (this.y >= groundLevel) {
+                    this.y = groundLevel;
+                    this.velocityY = 0;
+                    this.grounded = true;
+                    this.rotation = 0;
+                } else {
+                    // Rotasi saat melayang di udara
+                    this.rotation += 0.08;
+                }
+            },
+
+            draw() {
+                ctx.save();
+                ctx.translate(this.x + this.width / 2, this.y + this.height / 2);
+                ctx.rotate(this.rotation);
+
+                // Efek Neon Glow
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = this.color;
+
+                // Badan Karakter (Kotak dengan Sudut Tumpul)
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.roundRect(-this.width / 2, -this.height / 2, this.width, this.height, 8);
+                ctx.fill();
+
+                // Mata Karakter
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(2, -6, 8, 8);
+                ctx.fillRect(10, -6, 4, 8);
+
+                ctx.restore();
+            }
+        };
+
+        // Klasifikasi Rintangan (Obstacle)
+        class Obstacle {
+            constructor() {
+                this.width = Math.random() * 20 + 25;
+                this.height = Math.random() * 30 + 35;
+                this.x = canvas.width + this.width;
+                this.y = canvas.height - 40 - this.height;
+                this.color = '#f43f5e';
+            }
+
+            update() {
+                this.x -= gameSpeed;
+            }
+
+            draw() {
+                ctx.save();
+                ctx.shadowBlur = 12;
+                ctx.shadowColor = this.color;
+                ctx.fillStyle = this.color;
+                
+                // Menggambar Bentuk Rintangan Segitiga / Duri
+                ctx.beginPath();
+                ctx.moveTo(this.x, this.y + this.height);
+                ctx.lineTo(this.x + this.width / 2, this.y);
+                ctx.lineTo(this.x + this.width, this.y + this.height);
+                ctx.closePath();
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        // System Partikel Efek Visual
+        function createParticles(x, y, color, count = 5) {
+            for (let i = 0; i < count; i++) {
+                particles.push({
+                    x: x,
+                    y: y,
+                    vx: (Math.random() - 0.5) * 4,
+                    vy: (Math.random() - 0.5) * 4,
+                    size: Math.random() * 4 + 2,
+                    color: color,
+                    alpha: 1
+                });
+            }
+        }
+
+        function updateParticles() {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.alpha -= 0.03;
+
+                if (p.alpha <= 0) {
+                    particles.splice(i, 1);
+                } else {
+                    ctx.save();
+                    ctx.globalAlpha = p.alpha;
+                    ctx.fillStyle = p.color;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.restore();
+                }
+            }
+        }
+
+        // Latar Belakang Garis Grid Bergaris Bergerak
+        let bgOffset = 0;
+        function drawBackground() {
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Garis Grid Neon
+            ctx.strokeStyle = 'rgba(99, 102, 241, 0.08)';
+            ctx.lineWidth = 1;
+            
+            const gridSize = 40;
+            bgOffset = (bgOffset - gameSpeed * 0.3) % gridSize;
+
+            for (let x = bgOffset; x < canvas.width; x += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvas.height);
+                ctx.stroke();
+            }
+
+            // Garis Tanah (Ground Line)
+            const groundY = canvas.height - 40;
+            ctx.save();
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = '#a855f7';
+            ctx.strokeStyle = '#a855f7';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(0, groundY);
+            ctx.lineTo(canvas.width, groundY);
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        // Manajemen Spawn Rintangan
+        function handleObstacles() {
+            frameCount++;
+            // Jarak spawn acak berdasarkan kecepatan game
+            const spawnInterval = Math.max(50, Math.floor(110 - gameSpeed * 3));
+
+            if (frameCount % spawnInterval === 0) {
+                obstacles.push(new Obstacle());
+            }
+
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                const obs = obstacles[i];
+                obs.update();
+                obs.draw();
+
+                // Deteksi Tabrakan (AABB Collision)
+                const padding = 6; // Margin toleransi tabrakan agar fair
+                if (
+                    player.x + padding < obs.x + obs.width &&
+                    player.x + player.width - padding > obs.x &&
+                    player.y + padding < obs.y + obs.height &&
+                    player.y + player.height - padding > obs.y
+                ) {
+                    gameOver();
+                }
+
+                // Hapus Rintangan yang keluar layar
+                if (obs.x + obs.width < 0) {
+                    obstacles.splice(i, 1);
+                }
+            }
+        }
+
+        // Loop Game Utama
+        function gameLoop() {
+            if (!isPlaying) return;
+
+            drawBackground();
+
+            // Permainan Berjalan
+            player.update();
+            player.draw();
+
+            handleObstacles();
+            updateParticles();
+
+            // Peningkatan Skor & Kecepatan bertahap
+            score += 0.1;
+            gameSpeed += 0.0015;
+            scoreText.textContent = Math.floor(score);
+
+            // Bunyi bonus setiap 100 poin
+            if (Math.floor(score) > 0 && Math.floor(score) % 100 === 0 && frameCount % 6 === 0) {
+                sfx.playScore();
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Mulai Game
+        function startGame() {
+            sfx.init();
+            isPlaying = true;
+            score = 0;
+            gameSpeed = 5.5;
+            frameCount = 0;
+            obstacles = [];
+            particles = [];
+            player.reset();
+
+            scoreText.textContent = '0';
+            gameOverlay.classList.add('hidden');
+
+            gameLoop();
+        }
+
+        // Game Over
+        function gameOver() {
+            isPlaying = false;
+            sfx.playGameOver();
+            createParticles(player.x + player.width / 2, player.y + player.height / 2, '#f43f5e', 20);
+
+            // Simpan High Score
+            if (score > highScore) {
+                highScore = score;
+                localStorage.setItem('neon_dash_high_score', highScore);
+                highScoreText.textContent = Math.floor(highScore);
+            }
+
+            // Tampilkan UI Game Over
+            overlayIcon.className = "fa-solid fa-rotate-right text-3xl sm:text-4xl text-rose-400";
+            overlayTitle.textContent = "GAME OVER!";
+            overlaySubtitle.innerHTML = `Skor Akhir Kamu: <span class="text-cyan-400 font-bold text-lg">${Math.floor(score)}</span>`;
+            startBtn.innerHTML = `<i class="fa-solid fa-rotate-right"></i> Coba Lagi`;
+            gameOverlay.classList.remove('hidden');
+        }
+
+        // Event Listeners (Input Kontrol)
+        function triggerJump() {
+            if (isPlaying) {
+                player.jump();
+            }
+        }
+
+        // Kontrol Keyboard
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' || e.code === 'ArrowUp') {
+                e.preventDefault();
+                if (!isPlaying && gameOverlay.classList.contains('hidden') === false) {
+                    startGame();
+                } else {
+                    triggerJump();
+                }
+            }
+        });
+
+        // Kontrol Touch / Mouse pada Kanvas
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            triggerJump();
+        }, { passive: false });
+
+        canvas.addEventListener('mousedown', (e) => {
+            if (isPlaying) {
+                triggerJump();
+            }
+        });
+
+        // Tombol Start/Restart
+        startBtn.addEventListener('click', () => {
+            startGame();
+        });
+
+        // Render Layar Awal Saat Dimuat
+        drawBackground();
+        player.reset();
+        player.draw();
+    </script>
+</body>
+</html>
